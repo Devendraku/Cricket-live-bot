@@ -1,10 +1,30 @@
 import os
 import requests
+import threading
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+import asyncio
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CRIC_API_KEY = os.getenv("CRIC_API_KEY")
+
+# ---------- Keep Alive ----------
+flask_app = Flask('')
+
+@flask_app.route('/')
+def home():
+    return "Cricket Live Score Bot is Running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    flask_app.run(host="0.0.0.0", port=port)
+
+def keep_alive():
+    thread = threading.Thread(target=run_flask)
+    thread.daemon = True
+    thread.start()
+# --------------------------------
 
 def get_live_scores():
     url = f"https://api.cricapi.com/v1/currentMatches?apikey={CRIC_API_KEY}&offset=0"
@@ -34,10 +54,7 @@ def get_live_scores():
                 overs = s.get("o", 0)
                 score_text += f"• {team}: {runs}/{wickets} ({overs} ov)\n"
 
-            message += f"*{name}*\n"
-            message += f"{score_text}"
-            message += f"Status: {status}\n"
-            message += "────────────────\n"
+            message += f"*{name}*\n{score_text}Status: {status}\n────────────────\n"
 
         return message
 
@@ -57,13 +74,21 @@ async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = get_live_scores()
     await update.message.reply_text(result, parse_mode="Markdown")
 
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("score", score))
+async def main():
+    keep_alive()
+    
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("score", score))
+    
     print("Bot successfully started...")
-    app.run_polling()
+    
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    
+    # Bot ko continuously chalane ke liye
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
-  
+    asyncio.run(main())
