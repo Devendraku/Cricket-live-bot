@@ -5,7 +5,6 @@ from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 import asyncio
-import json
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CRICWIX_API_KEY = os.getenv("CRICWIX_API_KEY")
@@ -14,7 +13,7 @@ flask_app = Flask('')
 
 @flask_app.route('/')
 def home():
-    return "Bot is Running!"
+    return "Cricket Live Score Bot is Running!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -25,37 +24,80 @@ def keep_alive():
     thread.daemon = True
     thread.start()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bot chal raha hai.\n/score bhejo raw data dekhne ke liye.")
-
-async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("API se data la raha hoon...")
-    
+def get_live_scores():
     url = "https://api.cricwix.com/ext/v1/fixtures?status=live"
     headers = {"X-Api-Key": CRICWIX_API_KEY}
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
         data = response.json()
+
+        if not data.get("success"):
+            return "❌ Score abhi nahi mil raha."
+
+        fixtures = data.get("data", {}).get("fixtures", [])
         
-        # Pehle 1500 characters bhej rahe hain
-        raw_text = json.dumps(data, indent=2)
-        
-        if len(raw_text) > 3500:
-            raw_text = raw_text[:3500] + "\n\n... (baaki data cut ho gaya)"
-        
-        await update.message.reply_text(f"```\n{raw_text}\n```", parse_mode="Markdown")
-        
+        if not fixtures:
+            return "Abhi koi live match nahi chal raha."
+
+        message = "🏏 *Live Cricket Scores*\n\n"
+
+        for match in fixtures[:6]:
+            home = match.get("home_team", {})
+            away = match.get("away_team", {})
+            
+            home_name = home.get("team_name", "Team 1")
+            away_name = away.get("team_name", "Team 2")
+            home_score = home.get("score", "")
+            away_score = away.get("score", "")
+            
+            status = match.get("fixture_status", "Live")
+            league = match.get("league", {}).get("name", "")
+
+            message += f"*{home_name} vs {away_name}*\n"
+            if league:
+                message += f"🏆 {league}\n"
+            message += f"• {home_name}: {home_score}\n"
+            message += f"• {away_name}: {away_score}\n"
+            message += f"Status: {status}\n"
+            message += "────────────────\n"
+
+        return message
+
     except Exception as e:
-        await update.message.reply_text(f"Error: {str(e)}")
+        return f"Error: {str(e)}"
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Namaste! 🏏\n\n"
+        "Commands:\n"
+        "/score - Live scores dekho\n"
+        "/help - Help"
+    )
+
+async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Score la raha hoon... ⏳")
+    result = get_live_scores()
+    await update.message.reply_text(result, parse_mode="Markdown")
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🏏 *Live Cricket Score Bot*\n\n"
+        "/score - Live matches\n"
+        "/help - Yeh message",
+        parse_mode="Markdown"
+    )
 
 async def main():
     keep_alive()
+    
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("score", score))
+    application.add_handler(CommandHandler("help", help_command))
     
-    print("Temporary bot started...")
+    print("Bot started successfully...")
+    
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
