@@ -14,7 +14,7 @@ flask_app = Flask('')
 
 @flask_app.route('/')
 def home():
-    return "Cricket Live Score Bot is Running with Cricwix!"
+    return "Cricket Live Score Bot is Running!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -28,88 +28,51 @@ def keep_alive():
 
 def get_live_scores():
     url = "https://api.cricwix.com/ext/v1/fixtures?status=live"
-    headers = {
-        "X-Api-Key": CRICWIX_API_KEY
-    }
+    headers = {"X-Api-Key": CRICWIX_API_KEY}
     
     try:
-        response = requests.get(url, headers=headers, timeout=12)
+        response = requests.get(url, headers=headers, timeout=15)
         data = response.json()
 
         if not data.get("success"):
-            return "❌ Score abhi nahi mil raha. Thodi der baad try karo."
+            return "❌ Score abhi nahi mil raha."
 
-        fixtures = data.get("data", {}).get("fixtures", [])
+        fixtures = data.get("data", {}).get("fixtures", []) or data.get("data", [])
+        
         if not fixtures:
             return "Abhi koi live match nahi chal raha."
 
         message = "🏏 *Live Cricket Scores*\n\n"
 
-        for match in fixtures[:8]:
-            local = match.get("localteam", {})
-            visitor = match.get("visitorteam", {})
+        for match in fixtures[:6]:
+            # Different possible structures handle kar rahe hain
+            name = match.get("name") or match.get("match_title") or match.get("title") or "Match"
             
-            local_name = local.get("team_name", "Team 1") if isinstance(local, dict) else str(local)
-            visitor_name = visitor.get("team_name", "Team 2") if isinstance(visitor, dict) else str(visitor)
+            local = match.get("localteam") or match.get("team1") or {}
+            visitor = match.get("visitorteam") or match.get("team2") or {}
             
-            local_score = match.get("localteam_score", "")
-            visitor_score = match.get("visitorteam_score", "")
-            status = match.get("status", "Live")
-            match_name = match.get("name") or f"{local_name} vs {visitor_name}"
+            if isinstance(local, dict):
+                local_name = local.get("team_name") or local.get("name") or "Team 1"
+            else:
+                local_name = str(local)
+                
+            if isinstance(visitor, dict):
+                visitor_name = visitor.get("team_name") or visitor.get("name") or "Team 2"
+            else:
+                visitor_name = str(visitor)
 
-            message += f"*{match_name}*\n"
-            if local_score:
-                message += f"• {local_name}: {local_score}\n"
-            if visitor_score:
-                message += f"• {visitor_name}: {visitor_score}\n"
+            local_score = match.get("localteam_score") or match.get("team1_score") or match.get("score1") or ""
+            visitor_score = match.get("visitorteam_score") or match.get("team2_score") or match.get("score2") or ""
+            
+            status = match.get("status") or match.get("match_status") or "Live"
+
+            message += f"*{name}*\n"
+            message += f"• {local_name}: {local_score}\n"
+            message += f"• {visitor_name}: {visitor_score}\n"
             message += f"Status: {status}\n"
             message += "────────────────\n"
 
         return message
-
-    except Exception as e:
-        return f"Error aaya: {str(e)}"
-
-
-def get_upcoming_matches():
-    url = "https://api.cricwix.com/ext/v1/fixtures?status=upcoming"
-    headers = {
-        "X-Api-Key": CRICWIX_API_KEY
-    }
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=12)
-        data = response.json()
-
-        if not data.get("success"):
-            return "❌ Upcoming matches nahi mil rahe."
-
-        fixtures = data.get("data", {}).get("fixtures", [])
-        if not fixtures:
-            return "Koi upcoming match nahi mila."
-
-        message = "📅 *Upcoming Cricket Matches*\n\n"
-        count = 0
-        
-        for match in fixtures:
-            local = match.get("localteam", {})
-            visitor = match.get("visitorteam", {})
-            
-            local_name = local.get("team_name", "Team 1") if isinstance(local, dict) else str(local)
-            visitor_name = visitor.get("team_name", "Team 2") if isinstance(visitor, dict) else str(visitor)
-            
-            date = match.get("starting_at") or match.get("date", "Date nahi mili")
-            match_name = match.get("name") or f"{local_name} vs {visitor_name}"
-
-            message += f"*{match_name}*\n"
-            message += f"📅 {date}\n"
-            message += "────────────────\n"
-
-            count += 1
-            if count >= 8:
-                break
-
-        return message if count > 0 else "Abhi koi upcoming match nahi dikh raha."
 
     except Exception as e:
         return f"Error: {str(e)}"
@@ -118,10 +81,9 @@ def get_upcoming_matches():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Namaste! 🏏\n\n"
-        "Available Commands:\n"
-        "/score - Live matches ke scores\n"
-        "/upcoming - Aane wale matches\n"
-        "/help - Help message"
+        "Commands:\n"
+        "/score - Live scores\n"
+        "/help - Help"
     )
 
 async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,20 +91,11 @@ async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = get_live_scores()
     await update.message.reply_text(result, parse_mode="Markdown")
 
-async def upcoming(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Upcoming matches la raha hoon... ⏳")
-    result = get_upcoming_matches()
-    await update.message.reply_text(result, parse_mode="Markdown")
-
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🏏 *Cricket Live Score Bot*\n\n"
-        "Commands:\n"
-        "/start - Bot start\n"
-        "/score - Live scores\n"
-        "/upcoming - Upcoming matches\n"
-        "/help - Yeh message",
-        parse_mode="Markdown"
+        "🏏 Live Cricket Score Bot\n\n"
+        "/score - Live matches\n"
+        "/help - Yeh message"
     )
 
 async def main():
@@ -151,10 +104,9 @@ async def main():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("score", score))
-    application.add_handler(CommandHandler("upcoming", upcoming))
     application.add_handler(CommandHandler("help", help_command))
     
-    print("Bot successfully started with Cricwix...")
+    print("Bot started with Cricwix...")
     
     await application.initialize()
     await application.start()
