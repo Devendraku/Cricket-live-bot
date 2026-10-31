@@ -3,7 +3,7 @@ import requests
 import threading
 from flask import Flask
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 import asyncio
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -48,8 +48,8 @@ def get_live_scores():
             
             home_name = home.get("team_name", "Team 1")
             away_name = away.get("team_name", "Team 2")
-            home_score = home.get("score", "")
-            away_score = away.get("score", "")
+            home_score = home.get("score", "-")
+            away_score = away.get("score", "-")
             
             status = match.get("fixture_status", "Live")
             league = match.get("league", {}).get("name", "")
@@ -68,40 +68,34 @@ def get_live_scores():
         return f"Error: {str(e)}"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+    text = (
         "Namaste! 🏏\n\n"
         "Commands:\n"
         "/score - Live scores dekho\n"
         "/help - Help"
     )
+    
+    # Private chat ya Channel dono handle karega
+    if update.message:
+        await update.message.reply_text(text)
+    elif update.channel_post:
+        await update.channel_post.reply_text(text)
 
 async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Score la raha hoon... ⏳")
-    result = get_live_scores()
-    await update.message.reply_text(result, parse_mode="Markdown")
+    if update.message:
+        await update.message.reply_text("Score la raha hoon... ⏳")
+        result = get_live_scores()
+        await update.message.reply_text(result, parse_mode="Markdown")
+    elif update.channel_post:
+        await update.channel_post.reply_text("Score la raha hoon... ⏳")
+        result = get_live_scores()
+        await update.channel_post.reply_text(result, parse_mode="Markdown")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+    text = (
         "🏏 *Live Cricket Score Bot*\n\n"
         "/score - Live matches\n"
-        "/help - Yeh message",
-        parse_mode="Markdown"
+        "/help - Yeh message"
     )
-
-async def main():
-    keep_alive()
     
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("score", score))
-    application.add_handler(CommandHandler("help", help_command))
-    
-    print("Bot started successfully...")
-    
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    await asyncio.Event().wait()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    if update
