@@ -3,7 +3,7 @@ import requests
 import threading
 from flask import Flask
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes
 import asyncio
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -75,7 +75,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help - Help"
     )
     
-    # Private chat ya Channel dono handle karega
     if update.message:
         await update.message.reply_text(text)
     elif update.channel_post:
@@ -98,4 +97,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help - Yeh message"
     )
     
-    if update
+    if update.message:
+        await update.message.reply_text(text, parse_mode="Markdown")
+    elif update.channel_post:
+        await update.channel_post.reply_text(text, parse_mode="Markdown")
+
+async def main():
+    keep_alive()
+    
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("score", score))
+    application.add_handler(CommandHandler("help", help_command))
+    
+    print("Bot started successfully with Channel support...")
+    
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    asyncio.run(main())
